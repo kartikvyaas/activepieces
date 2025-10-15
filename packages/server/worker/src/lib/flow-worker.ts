@@ -89,10 +89,8 @@ export const flowWorker = (log: FastifyBaseLogger) => ({
             }
         })
 
-        socket.connect()
-
-
-        heartbeatInterval = setInterval(async () => {
+        // Send initial heartbeat immediately to initialize worker machine settings
+        const sendHeartbeat = async () => {
             if (!socket.connected) {
                 log.error({
                     message: 'Not connected to server, retrying...',
@@ -110,7 +108,17 @@ export const flowWorker = (log: FastifyBaseLogger) => ({
                     error,
                 })
             }
-        }, 15000)
+        }
+
+        socket.connect()
+        await new Promise<void>((resolve) => {
+            socket.once('connect', async () => {
+                await sendHeartbeat()
+                resolve()
+            })
+        })
+
+        heartbeatInterval = setInterval(sendHeartbeat, 15000)
 
     },
 
