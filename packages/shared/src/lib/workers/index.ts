@@ -102,6 +102,8 @@ export const WorkerMachineHealthcheckResponse = Type.Object({
     REDIS_SENTINEL_ROLE: Type.Optional(Type.String()),
     REDIS_SENTINEL_HOSTS: Type.Optional(Type.String()),
     REDIS_SENTINEL_NAME: Type.Optional(Type.String()),
+    REDIS_FAILED_JOB_RETENTION_DAYS: Type.Number(),
+    REDIS_FAILED_JOB_RETENTION_MAX_COUNT: Type.Number(),
 })
 
 export type WorkerMachineHealthcheckResponse = Static<typeof WorkerMachineHealthcheckResponse>

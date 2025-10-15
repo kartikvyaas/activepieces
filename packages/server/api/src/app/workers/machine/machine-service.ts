@@ -49,7 +49,7 @@ export const machineService = (log: FastifyBaseLogger) => {
         async release(workerId: string): Promise<void> {
             await machineRouting.release(workerId)
         },
-        async getConcurrency(): Promise<Record<QueueName, number>> {
+        async getConcurrency(): Promise<Partial<Record<QueueName, number>>> {
             const machines = await machineService(log).list()
             const flowWorkerConcurrency = machines.reduce((acc, machine) => acc + (parseInt(machine.information.workerProps[WorkerSystemProp.WORKER_CONCURRENCY]) || 0), 0)
             return {
@@ -128,6 +128,8 @@ export const machineService = (log: FastifyBaseLogger) => {
                 REDIS_SENTINEL_ROLE: system.get(AppSystemProp.REDIS_SENTINEL_ROLE),
                 REDIS_SENTINEL_HOSTS: system.get(AppSystemProp.REDIS_SENTINEL_HOSTS),
                 REDIS_SENTINEL_NAME: system.get(AppSystemProp.REDIS_SENTINEL_NAME),
+                REDIS_FAILED_JOB_RETENTION_DAYS: system.getNumberOrThrow(AppSystemProp.REDIS_FAILED_JOB_RETENTION_DAYS),
+                REDIS_FAILED_JOB_RETENTION_MAX_COUNT: system.getNumberOrThrow(AppSystemProp.REDIS_FAILED_JOB_RETENTION_MAX_COUNT),
             }
 
             await machineService(log).updateConcurrency()

@@ -156,8 +156,6 @@ async function consumeJob(request: ConsumeJobRequest, log: FastifyBaseLogger): P
                             status: ConsumeJobResponseStatus.OK,
                         }
                     case WorkerJobType.EXECUTE_FLOW:
-                        console.log('executing flow')
-                        console.log(jobData)
                         await flowJobExecutor(log).executeFlow({ jobData, attempsStarted, engineToken, timeoutInSeconds })
                         span.setAttribute('worker.completed', true)
                         return {

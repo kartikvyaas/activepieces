@@ -1,10 +1,9 @@
-import { AppSystemProp, QueueName } from '@activepieces/server-shared'
+import { apDayjsDuration, AppSystemProp, QueueName } from '@activepieces/server-shared'
 import { ApEdition, ApId, isNil } from '@activepieces/shared'
 import { Queue, QueueEvents } from 'bullmq'
 import { BullMQOtel } from 'bullmq-otel'
 import { FastifyBaseLogger } from 'fastify'
 import { redisConnections } from '../../database/redis-connections'
-import { apDayjsDuration } from '../../helper/dayjs-helper'
 import { system } from '../../helper/system/system'
 import { machineService } from '../machine/machine-service'
 import { queueMetrics } from './queue-events'
@@ -71,10 +70,10 @@ async function ensureQueueExists(queueName: QueueName, log: FastifyBaseLogger): 
     if (!isNil(bullMqQueue)) {
         return bullMqQueue
     }
-    const isOtpEnabled = system.getBoolean(AppSystemProp.OTEL_ENABLED)
+    const isOtelEnabled = system.getBoolean(AppSystemProp.OTEL_ENABLED)
 
     const options = {
-        telemetry: isOtpEnabled ? new BullMQOtel(queueName) : undefined,
+        telemetry: isOtelEnabled ? new BullMQOtel(queueName) : undefined,
         connection: await redisConnections.create(),
         defaultJobOptions: {
             attempts: 5,
@@ -88,7 +87,6 @@ async function ensureQueueExists(queueName: QueueName, log: FastifyBaseLogger): 
                 count: REDIS_FAILED_JOB_RETRY_COUNT,
             },
         },
-
     }
 
     bullMqQueue = new Queue(queueName, options)

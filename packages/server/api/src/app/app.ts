@@ -60,6 +60,7 @@ import { flagModule } from './flags/flag.module'
 import { flagHooks } from './flags/flags.hooks'
 import { humanInputModule } from './flows/flow/human-input/human-input.module'
 import { flowRunModule } from './flows/flow-run/flow-run-module'
+import { runsMetadataQueueConsumer } from './flows/flow-run/runs-metadata-queue'
 import { flowModule } from './flows/flow.module'
 import { folderModule } from './flows/folder/folder.module'
 import { issuesModule } from './flows/issues/issues-module'
@@ -337,6 +338,7 @@ export const setupApp = async (app: FastifyInstance): Promise<FastifyInstance> =
         app.log.info('Shutting down')
         await jobQueueWorker(app.log).close()
         await systemJobsSchedule(app.log).close()
+        await runsMetadataQueueConsumer(app.log).close()
         await engineResponseWatcher(app.log).shutdown()
     })
 

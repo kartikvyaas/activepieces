@@ -1,4 +1,4 @@
-import { AppSystemProp } from '@activepieces/server-shared'
+import { AppSystemProp, runsMetadataQueue } from '@activepieces/server-shared'
 import { ApEdition, assertNotNullOrUndefined, isNil } from '@activepieces/shared'
 import { createBullBoard } from '@bull-board/api'
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter'
@@ -38,9 +38,12 @@ export async function setupBullMQBoard(app: FastifyInstance): Promise<void> {
 
     assertNotNullOrUndefined(bullMqQueue, 'bullMqQueue')
     
+    const runsMetadataQueueInstance = runsMetadataQueue.get()
+    
     const allQueues = [
         new BullMQAdapter(bullMqQueue),
         new BullMQAdapter(systemJobsQueue),
+        new BullMQAdapter(runsMetadataQueueInstance),
     ]
 
     const serverAdapter = new FastifyAdapter()
