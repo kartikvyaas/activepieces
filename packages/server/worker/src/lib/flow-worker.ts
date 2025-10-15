@@ -89,7 +89,6 @@ export const flowWorker = (log: FastifyBaseLogger) => ({
             }
         })
 
-        // Send initial heartbeat immediately to initialize worker machine settings
         const sendHeartbeat = async () => {
             if (!socket.connected) {
                 log.error({

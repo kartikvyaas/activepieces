@@ -39,8 +39,40 @@ end
 return redis.call('GET', key)
 `
 
+const DELETE_IF_UNCHANGED_SCRIPT = `
+local key = KEYS[1]
+local expectedUpdatedAt = ARGV[1]
+
+-- Get current data
+local existingData = redis.call('GET', key)
+
+if not existingData then
+    -- Key doesn't exist, return -1
+    return -1
+end
+
+-- Parse the data
+local data = cjson.decode(existingData)
+
+-- Check if updatedAt matches
+if data.updated == expectedUpdatedAt then
+    -- updatedAt matches, safe to delete
+    redis.call('DEL', key)
+    return 1
+else
+    -- updatedAt has changed, don't delete
+    return 0
+end
+`
+
 export type RunsMetadataUpsertData = Partial<FlowRun> & {
     id: ApId
+    updated: string
+}
+
+export enum RunsMetadataDeleteFailureReason {
+    UPDATED_AT_CHANGED = 'UPDATED_AT_CHANGED',
+    KEY_NOT_FOUND = 'KEY_NOT_FOUND',
 }
 
 export type RunsMetadataJobOptions = {
@@ -94,8 +126,7 @@ export const runsMetadataQueue = {
             throw new Error('Redis connection not initialized.')
         }
 
-        // Upsert run metadata in Redis using Lua script
-        const key = getRunsMetadataKey(params.id)
+        const key = this.getRunsMetadataKey(params.id)
         const runData = JSON.stringify(params)
 
         await redisConnectionInstance.eval(
@@ -105,7 +136,6 @@ export const runsMetadataQueue = {
             runData,
         )
 
-        // Add job with only runId to keep job data minimal
         await runsMetadataQueueInstance.add(
             'update-run-metadata',
             { runId: params.id },
@@ -125,9 +155,9 @@ export const runsMetadataQueue = {
             throw new Error('Redis connection not initialized.')
         }
 
-        const key = getRunsMetadataKey(runId)
+        const key = this.getRunsMetadataKey(runId)
         const data = await redisConnectionInstance.get(key)
-        
+
         if (isNil(data)) {
             return null
         }
@@ -140,11 +170,35 @@ export const runsMetadataQueue = {
             throw new Error('Redis connection not initialized.')
         }
 
-        const key = getRunsMetadataKey(runId)
+        const key = this.getRunsMetadataKey(runId)
         await redisConnectionInstance.del(key)
     },
-}
 
-const getRunsMetadataKey = (runId: ApId): string => `runs-metadata:${runId}`
+    async deleteRunMetadataIfUnchanged(runId: ApId, expectedUpdatedAt: string): Promise<{ deleted: true } | { deleted: false, reason: RunsMetadataDeleteFailureReason }> {
+        if (isNil(redisConnectionInstance)) {
+            throw new Error('Redis connection not initialized.')
+        }
+
+        const key = this.getRunsMetadataKey(runId)
+        const result = await redisConnectionInstance.eval(
+            DELETE_IF_UNCHANGED_SCRIPT,
+            1,
+            key,
+            expectedUpdatedAt,
+        ) as number
+
+        if (result === 1) {
+            return { deleted: true }
+        }
+        else if (result === 0) {
+            return { deleted: false, reason: RunsMetadataDeleteFailureReason.UPDATED_AT_CHANGED }
+        }
+        else {
+            return { deleted: false, reason: RunsMetadataDeleteFailureReason.KEY_NOT_FOUND }
+        }
+    },
+
+    getRunsMetadataKey: (runId: ApId): string => `runs-metadata:${runId}`,
+}
 
 

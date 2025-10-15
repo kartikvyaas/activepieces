@@ -5,10 +5,17 @@ import { BullMQOtel } from 'bullmq-otel'
 import { FastifyBaseLogger } from 'fastify'
 import { redisConnections } from '../../../database/redis-connections'
 import { system } from '../../../helper/system/system'
+import { flowRunRepo } from '../flow-run-service'
 
 let runsMetadataWorker: Worker<RunsMetadataJobData> | undefined = undefined
 
-export const runsMetadataQueueConsumer = (log: FastifyBaseLogger) => ({
+type RunsMetadataQueueConsumer = {
+    init(): Promise<void>
+    close(): Promise<void>
+    run(): Promise<void>
+}
+
+export const runsMetadataQueueConsumer = (log: FastifyBaseLogger): RunsMetadataQueueConsumer => ({
     async init(): Promise<void> {
         runsMetadataWorker = await ensureWorkerExists(log)
         log.info('[runsMetadataQueueConsumer#init] Runs metadata worker initialized')
@@ -45,15 +52,52 @@ async function ensureWorkerExists(log: FastifyBaseLogger): Promise<Worker<RunsMe
                 runId: job.data.runId,
             })
             
-            // TODO: Implementation will fetch the latest run from a separate store
-            // by the runId from job data and then update the database
-            // This is out of scope for now
-            
-            log.info({
-                message: 'Runs metadata job processed successfully',
-                jobId: job.id,
-                runId: job.data.runId,
-            })
+            try {
+                const runMetadata = await runsMetadataQueue.getRunMetadata(job.data.runId)
+
+                if (isNil(runMetadata)) {
+                    log.warn({
+                        message: 'No metadata found for run',
+                        jobId: job.id,
+                        runId: job.data.runId,
+                    })
+                    return
+                }
+                
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                await flowRunRepo().upsert(runMetadata as any, ['id'])
+
+                const deleteResult = await runsMetadataQueue.deleteRunMetadataIfUnchanged(
+                    job.data.runId,
+                    runMetadata.updated,
+                )
+                    
+                if (deleteResult.deleted) {
+                    log.info({
+                        message: 'Deleted runs metadata from Redis',
+                        jobId: job.id,
+                        runId: job.data.runId,
+                    })
+                }
+                else {
+                    log.info({
+                        message: 'Kept runs metadata in Redis',
+                        jobId: job.id,
+                        runId: job.data.runId,
+                        reason: deleteResult.reason,
+                    })
+                }
+                
+            }
+            catch (error) {
+                log.error({
+                    message: 'Error processing runs metadata job',
+                    jobId: job.id,
+                    runId: job.data.runId,
+                    error,
+                })
+                throw error
+            }
         },
         {
             connection: await redisConnections.create(),
