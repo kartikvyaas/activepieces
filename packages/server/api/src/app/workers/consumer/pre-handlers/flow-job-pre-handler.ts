@@ -1,3 +1,4 @@
+import { runsMetadataQueue } from '@activepieces/server-shared'
 import { ExecuteFlowJobData, FlowRunStatus, JobData } from '@activepieces/shared'
 import { FastifyBaseLogger } from 'fastify'
 import { projectLimitsService } from '../../../ee/projects/project-plan/project-plan.service'
@@ -10,10 +11,11 @@ export const flowJobPreHandler: JobPreHandler = {
         const oneTimeJob = job as ExecuteFlowJobData
         const { runId, projectId } = oneTimeJob
         
-        flowRunService(log).updateRunStatusAsync({
-            flowRunId: runId,
-            status: FlowRunStatus.RUNNING,
-        })
+        // await runsMetadataQueue.add({
+        //     id: runId,
+        //     updated: new Date().toISOString(),
+        //     status: FlowRunStatus.RUNNING,
+        // })
 
         const exceededLimit = await projectLimitsService(log).checkTasksExceededLimit(projectId)
         if (exceededLimit) {
@@ -29,14 +31,14 @@ export const flowJobPreHandler: JobPreHandler = {
             return { shouldSkip: false }
         }
 
-        const runExists = await flowRunService(log).existsBy(runId)
+        // const runExists = await flowRunService(log).existsBy(runId)
 
-        if (!runExists) {
-            return {
-                shouldSkip: true,
-                reason: 'Run was deleted',
-            }
-        }
+        // if (!runExists) {
+        //     return {
+        //         shouldSkip: true,
+        //         reason: 'Run was deleted',
+        //     }
+        // }
 
         return { shouldSkip: false }
     },

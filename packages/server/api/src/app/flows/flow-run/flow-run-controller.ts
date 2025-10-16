@@ -48,6 +48,7 @@ export const flowRunController: FastifyPluginAsyncTypebox = async (app) => {
                 projectId: request.principal.projectId,
                 id: request.params.id,
             })
+            console.log('flowRun from flowRunController', flowRun)
             await reply.send(flowRun)
         },
     )

@@ -1,5 +1,5 @@
 import { exceptionHandler, pinoLogging } from '@activepieces/server-shared'
-import { ActivepiecesError, BeginExecuteFlowOperation, EngineResponseStatus, ErrorCode, ExecuteFlowJobData, ExecutionType, FlowRunStatus, FlowVersion, isNil, ResumeExecuteFlowOperation, ResumePayload, UpdateLogsBehavior } from '@activepieces/shared'
+import { ActivepiecesError, BeginExecuteFlowOperation, EngineResponseStatus, ErrorCode, ExecuteFlowJobData, ExecutionType, FlowRunStatus, FlowVersion, isNil, ResumeExecuteFlowOperation, ResumePayload } from '@activepieces/shared'
 import { FastifyBaseLogger } from 'fastify'
 import { engineApiService } from '../api/server-api.service'
 import { flowWorkerCache } from '../cache/flow-worker-cache'
@@ -78,7 +78,6 @@ async function handleMemoryIssueError(jobData: ExecuteFlowJobData, engineToken: 
         progressUpdateType: jobData.progressUpdateType,
         workerHandlerId: jobData.synchronousHandlerId,
         runId: jobData.runId,
-        updateLogsBehavior: UpdateLogsBehavior.NONE,
     })
 }
 
@@ -95,7 +94,6 @@ async function handleTimeoutError(jobData: ExecuteFlowJobData, engineToken: stri
         progressUpdateType: jobData.progressUpdateType,
         workerHandlerId: jobData.synchronousHandlerId,
         runId: jobData.runId,
-        updateLogsBehavior: UpdateLogsBehavior.NONE,
     })
 }
 
@@ -111,7 +109,6 @@ async function handleInternalError(jobData: ExecuteFlowJobData, engineToken: str
         progressUpdateType: jobData.progressUpdateType,
         workerHandlerId: jobData.synchronousHandlerId,
         runId: jobData.runId,
-        updateLogsBehavior: UpdateLogsBehavior.NONE,
     })
     exceptionHandler.handle(e, log)
     throw e

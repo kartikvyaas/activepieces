@@ -1,14 +1,9 @@
 import { Static, Type } from '@sinclair/typebox'
-import { DiscriminatedUnion, Nullable } from '../common'
+import { Nullable } from '../common'
 import { FlowRunResponse } from '../flow-run/execution/flow-execution'
 import { ProgressUpdateType } from './engine-operation'
 
-export enum UpdateLogsBehavior {
-    UPDATE_LOGS_METADATA = 'UPDATE_LOGS_METADATA',
-    NONE = 'NONE',
-}
-
-const BaseUpdateRunProgressRequest = {
+export const UpdateRunProgressRequest = Type.Object({
     runDetails: Type.Omit(FlowRunResponse, ['steps']),
     runId: Type.String(),
     progressUpdateType: Type.Optional(Type.Enum(ProgressUpdateType)),
@@ -16,20 +11,9 @@ const BaseUpdateRunProgressRequest = {
     httpRequestId: Nullable(Type.String()),
     failedStepName: Type.Optional(Type.String()),
     testSingleStepMode: Type.Optional(Type.Boolean()),
-}
-
-export const UpdateRunProgressRequest = DiscriminatedUnion('updateLogsBehavior', [
-    Type.Object({
-        ...BaseUpdateRunProgressRequest,
-        updateLogsBehavior: Type.Literal(UpdateLogsBehavior.UPDATE_LOGS_METADATA),
-        executionStateContentLength: Type.Number(),
-        logsFileId: Type.Optional(Type.String()),
-    }),
-    Type.Object({
-        ...BaseUpdateRunProgressRequest,
-        updateLogsBehavior: Type.Literal(UpdateLogsBehavior.NONE),
-    }),
-])
+    executionStateContentLength: Type.Optional(Type.Number()),
+    logsFileId: Type.Optional(Type.String()),
+})
 
 export type UpdateRunProgressRequest = Static<typeof UpdateRunProgressRequest>
 

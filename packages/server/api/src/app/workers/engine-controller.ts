@@ -1,10 +1,9 @@
-import { apAxios, GetRunForWorkerRequest } from '@activepieces/server-shared'
-import { assertNotNullOrUndefined, CreateTriggerRunRequestBody, EngineHttpResponse, FileType, FlowRunResponse, FlowRunStatus, GetFlowVersionForWorkerRequest, isNil, ListFlowsRequest, PauseType, PopulatedFlow, PrincipalType, ProgressUpdateType, SendFlowResponseRequest, UpdateLogsBehavior, UpdateLogsRequest, UpdateRunProgressRequest, WebsocketClientEvent } from '@activepieces/shared'
+import { GetRunForWorkerRequest, runsMetadataQueue } from '@activepieces/server-shared'
+import { CreateTriggerRunRequestBody, EngineHttpResponse, FileType, FlowRunResponse, FlowRunStatus, GetFlowVersionForWorkerRequest, isNil, ListFlowsRequest, PopulatedFlow, PrincipalType, ProgressUpdateType, SendFlowResponseRequest, UpdateLogsRequest, UpdateRunProgressRequest, WebsocketClientEvent } from '@activepieces/shared'
 import { FastifyPluginAsyncTypebox, Type } from '@fastify/type-provider-typebox'
 import { FastifyBaseLogger } from 'fastify'
 import { StatusCodes } from 'http-status-codes'
 import { entitiesMustBeOwnedByCurrentProject } from '../authentication/authorization'
-import { domainHelper } from '../ee/custom-domains/domain-helper'
 import { fileService } from '../file/file.service'
 import { flowService } from '../flows/flow/flow.service'
 import { flowRunService } from '../flows/flow-run/flow-run-service'
@@ -49,7 +48,8 @@ export const flowEngineWorker: FastifyPluginAsyncTypebox = async (app) => {
     })
 
     app.post('/update-run', UpdateRunProgress, async (request, reply) => {
-        const { runId, workerHandlerId, runDetails, httpRequestId, failedStepName: failedStepName, testSingleStepMode } = request.body
+        console.log('update-run', request.body)
+        const { runId, workerHandlerId, runDetails, httpRequestId, failedStepName: failedStepName, testSingleStepMode, executionStateContentLength, logsFileId } = request.body
         const progressUpdateType = request.body.progressUpdateType ?? ProgressUpdateType.NONE
 
         const nonSupportedStatuses = [FlowRunStatus.RUNNING, FlowRunStatus.SUCCEEDED, FlowRunStatus.PAUSED]
@@ -61,19 +61,26 @@ export const flowEngineWorker: FastifyPluginAsyncTypebox = async (app) => {
             )
         }
 
-        const runWithoutSteps = await flowRunService(request.log).updateRun({
-            flowRunId: runId,
+        await runsMetadataQueue.add({
+            id: runId,
             status: runDetails.status,
             tasks: runDetails.tasks,
-            duration: runDetails.duration,
-            projectId: request.principal.projectId,
+            duration: runDetails.duration ? Math.floor(Number(runDetails.duration)) : undefined,
             tags: runDetails.tags ?? [],
-            failedStepName,
+            finishTime: new Date().toISOString(),
+            failedStepName: failedStepName ?? undefined,
+            logsFileId: logsFileId ?? undefined,
+            updated: new Date().toISOString(),
         })
-        await handleUpdateLogsBehavior({
-            log: request.log,
-            ...request.body,
-        })
+        console.log('runsMetadataQueue.add', runId)
+
+        if (!isNil(logsFileId) && !isNil(executionStateContentLength)) {
+            await flowRunService(request.log).updateLogsSize({
+                logsFileId,
+                executionStateContentLength,
+            })
+            console.log('flowRunService.updateLogsSize', logsFileId, executionStateContentLength)
+        }
 
         if (runDetails.status === FlowRunStatus.PAUSED) {
             await flowRunService(request.log).pause({
@@ -85,16 +92,7 @@ export const flowEngineWorker: FastifyPluginAsyncTypebox = async (app) => {
                 },
             })
         }
-        const shouldMarkParentAsFailed = runWithoutSteps.failParentOnFailure && !isNil(runWithoutSteps.parentRunId) && ![FlowRunStatus.SUCCEEDED, FlowRunStatus.RUNNING, FlowRunStatus.PAUSED, FlowRunStatus.QUEUED].includes(runWithoutSteps.status)
-        if (shouldMarkParentAsFailed) {
-            await markParentRunAsFailed({
-                parentRunId: runWithoutSteps.parentRunId!,
-                childRunId: runWithoutSteps.id,
-                projectId: request.principal.projectId,
-                platformId: request.principal.platform.id,
-                log: request.log,
-            })
-        }
+
         app.io.to(request.principal.projectId).emit(WebsocketClientEvent.FLOW_RUN_PROGRESS, {
             runId,
         })
@@ -175,30 +173,6 @@ export const flowEngineWorker: FastifyPluginAsyncTypebox = async (app) => {
     })
 }
 
-async function handleUpdateLogsBehavior(request: HandleUpdateLogsBehaviorParams): Promise<void> {
-    const { updateLogsBehavior, executionStateContentLength, logsFileId } = request
-    if (updateLogsBehavior === UpdateLogsBehavior.UPDATE_LOGS_METADATA) {
-        assertNotNullOrUndefined(executionStateContentLength, 'executionStateContentLength is required for UPDATE_LOGS_METADATA')
-        assertNotNullOrUndefined(logsFileId, 'logsFileId is required for UPDATE_LOGS_METADATA')
-        await flowRunService(request.log).updateLogsSizeAndAttachLogsFile({
-            flowRunId: request.runId,
-            logsFileId,
-            executionStateContentLength,
-        })
-    }
-    else if (updateLogsBehavior === UpdateLogsBehavior.NONE) {
-        return
-    }
-}
-
-type HandleUpdateLogsBehaviorParams = {
-    log: FastifyBaseLogger
-    updateLogsBehavior: UpdateLogsBehavior
-    executionStateContentLength?: number
-    logsFileId?: string
-    runId: string
-}
-
 async function getFlowResponse(
     result: FlowRunResponse,
 ): Promise<EngineHttpResponse> {
@@ -248,41 +222,6 @@ async function getFlow(projectId: string, request: GetFlowVersionForWorkerReques
         projectId,
         versionId: request.versionId,
     })
-}
-
-
-async function markParentRunAsFailed({
-    parentRunId,
-    childRunId,
-    projectId,
-    platformId,
-    log,
-}: MarkParentRunAsFailedParams): Promise<void> {
-    const flowRun = await flowRunService(log).getOneOrThrow({
-        id: parentRunId,
-        projectId,
-    })
-
-    const requestId = flowRun.pauseMetadata?.type === PauseType.WEBHOOK ? flowRun.pauseMetadata?.requestId : undefined
-    assertNotNullOrUndefined(requestId, 'Parent run has no request id')
-
-    const callbackUrl = await domainHelper.getPublicApiUrl({ path: `/v1/flow-runs/${parentRunId}/requests/${requestId}`, platformId })
-    const childRunUrl = await domainHelper.getPublicUrl({ path: `/projects/${projectId}/runs/${childRunId}`, platformId })
-    await apAxios.post(callbackUrl, {
-        status: 'error',
-        data: {
-            message: 'Subflow execution failed',
-            link: childRunUrl,
-        },
-    })
-}
-
-type MarkParentRunAsFailedParams = {
-    parentRunId: string
-    childRunId: string
-    projectId: string
-    platformId: string
-    log: FastifyBaseLogger
 }
 
 const GetAllFlowsByProjectParams = {

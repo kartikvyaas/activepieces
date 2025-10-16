@@ -1,4 +1,4 @@
-import { AppSystemProp, exceptionHandler, rejectedPromiseHandler } from '@activepieces/server-shared'
+import { AppSystemProp, exceptionHandler, rejectedPromiseHandler, runsMetadataQueue } from '@activepieces/server-shared'
 import {
     ActivepiecesError,
     apId,
@@ -208,9 +208,6 @@ export const flowRunService = (log: FastifyBaseLogger) => ({
         await flowRunSideEffects(log).onResume(flowRun)
         return flowRun
     },
-    updateRunStatusAsync({ flowRunId, status }: UpdateRunStatusParams): void {
-        rejectedPromiseHandler(flowRunRepo().update(flowRunId, { status }), log)
-    },
     async updateRun({
         flowRunId,
         status,
@@ -278,15 +275,14 @@ export const flowRunService = (log: FastifyBaseLogger) => ({
                 projectId,
             },
         })
-        await flowRunRepo().update(flowRunId, {
+        await runsMetadataQueue.add({
+            id: flowRunId,
             logsFileId: newLogsFileId,
+            updated: new Date().toISOString(),
         })
         return { logsFileId: newLogsFileId }
     },
-    async updateLogsSizeAndAttachLogsFile({ flowRunId, logsFileId, executionStateContentLength }: UpdateLogsSizeAndAttachLogsFileParams): Promise<void> {
-        await flowRunRepo().update(flowRunId, {
-            logsFileId,
-        })
+    async updateLogsSize({ logsFileId, executionStateContentLength }: UpdateLogsSizeParams): Promise<void> {
         await fileService(log).updateSize({
             fileId: logsFileId,
             size: executionStateContentLength,
@@ -452,6 +448,10 @@ export const flowRunService = (log: FastifyBaseLogger) => ({
         return flowRun
     },
     async getOneOrThrow(params: GetOneParams): Promise<FlowRun> {
+        const flowRunMetadata = await runsMetadataQueue.getRunMetadata(params.id)
+        if (!isNil(flowRunMetadata)) {
+            return flowRunMetadata as FlowRun
+        }
 
         const flowRun = await queryBuilderForFlowRun(flowRunRepo()).where({
             id: params.id,
@@ -683,7 +683,7 @@ function queryBuilderForFlowRun(repo: Repository<FlowRun>) {
 }
 
 async function create(params: CreateParams): Promise<FlowRun> {
-    return flowRunRepo().save({
+    const newFlowRun: FlowRun = {
         id: apId(),
         projectId: params.projectId,
         flowId: params.flowId,
@@ -694,7 +694,16 @@ async function create(params: CreateParams): Promise<FlowRun> {
         failParentOnFailure: params.failParentOnFailure ?? true,
         status: FlowRunStatus.QUEUED,
         stepNameToTest: params.stepNameToTest,
-    })
+        created: new Date().toISOString(),
+        updated: new Date().toISOString(),
+        logsFileId: null,
+        steps: {},
+        tags: [],
+    }
+
+    await runsMetadataQueue.add(newFlowRun)
+
+    return newFlowRun
 }
 
 type CreateLogsUploadFileParams = {
@@ -725,8 +734,7 @@ type FinishParams = {
     failedStepName?: string | undefined
 }
 
-type UpdateLogsSizeAndAttachLogsFileParams = {
-    flowRunId: FlowRunId
+type UpdateLogsSizeParams = {
     logsFileId: string
     executionStateContentLength: number
 }

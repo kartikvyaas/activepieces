@@ -13,7 +13,6 @@ export enum JobStatus {
 
 export enum QueueName {
     WORKER_JOBS = 'workerJobs',
-    RUNS_METADATA = 'runsMetadata',
 }
 
 

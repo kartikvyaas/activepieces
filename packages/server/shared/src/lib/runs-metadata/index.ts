@@ -3,7 +3,6 @@ import { Static, Type } from '@sinclair/typebox'
 import { Queue } from 'bullmq'
 import { BullMQOtel } from 'bullmq-otel'
 import { Redis } from 'ioredis'
-import { QueueName } from '../job'
 
 export const RunsMetadataJobData = Type.Object({
     runId: Type.String(),
@@ -83,6 +82,8 @@ export type RunsMetadataJobOptions = {
     isOtelEnabled: boolean
 }
 
+export const RUNS_METADATA_QUEUE_NAME = 'runsMetadata'
+
 let runsMetadataQueueInstance: Queue<RunsMetadataJobData> | undefined = undefined
 let redisConnectionInstance: Redis | undefined = undefined
 
@@ -97,9 +98,9 @@ export const runsMetadataQueue = {
 
         redisConnectionInstance = redisConnection
 
-        runsMetadataQueueInstance = new Queue<RunsMetadataJobData>(QueueName.RUNS_METADATA, {
+        runsMetadataQueueInstance = new Queue<RunsMetadataJobData>(RUNS_METADATA_QUEUE_NAME, {
             connection: redisConnection,
-            telemetry: options.isOtelEnabled ? new BullMQOtel(QueueName.RUNS_METADATA) : undefined,
+            telemetry: options.isOtelEnabled ? new BullMQOtel(RUNS_METADATA_QUEUE_NAME) : undefined,
             defaultJobOptions: {
                 attempts: options.attempts,
                 backoff: {
@@ -162,7 +163,14 @@ export const runsMetadataQueue = {
             return null
         }
 
-        return JSON.parse(data) as RunsMetadataUpsertData
+        const parsed = JSON.parse(data) as RunsMetadataUpsertData
+        
+        // Fix tags if it was converted to an object by Lua cjson (empty arrays become empty objects)
+        if (parsed.tags !== undefined && !Array.isArray(parsed.tags)) {
+            parsed.tags = []
+        }
+        
+        return parsed
     },
 
     async deleteRunMetadata(runId: ApId): Promise<void> {

@@ -31,6 +31,8 @@ export const workerModule: FastifyPluginAsyncTypebox = async (app) => {
 // This should be called after the app is booted, to ensure no plugin timeout
 export const migrateQueuesAndRunConsumers = async (app: FastifyInstance) => {
     await queueMigration(app.log).run()
-    await jobQueueWorker(app.log).run()
-    await runsMetadataQueueConsumer(app.log).run()
+    await Promise.all([
+        jobQueueWorker(app.log).run(),
+        runsMetadataQueueConsumer(app.log).run(),
+    ])
 }

@@ -1,6 +1,6 @@
 import crypto from 'crypto'
 import { OutputContext } from '@activepieces/pieces-framework'
-import { DEFAULT_MCP_DATA, FlowActionType, GenericStepOutput, isNil, logSerializer, LoopStepOutput, SendFlowResponseRequest, StepOutput, StepOutputStatus, UpdateLogsBehavior, UpdateLogsRequest, UpdateRunProgressRequest } from '@activepieces/shared'
+import { DEFAULT_MCP_DATA, FlowActionType, GenericStepOutput, isNil, logSerializer, LoopStepOutput, SendFlowResponseRequest, StepOutput, StepOutputStatus, UpdateLogsRequest, UpdateRunProgressRequest } from '@activepieces/shared'
 import { Mutex } from 'async-mutex'
 import fetchRetry from 'fetch-retry'
 import { EngineConstants } from '../handler/context/engine-constants'
@@ -111,7 +111,6 @@ const sendUpdateRunRequest = async (updateParams: UpdateStepProgressParams): Pro
             progressUpdateType: engineConstants.progressUpdateType,
             failedStepName: extractFailedStepName(runDetails.steps as Record<string, StepOutput>),
             testSingleStepMode: engineConstants.testSingleStepMode,
-            updateLogsBehavior: UpdateLogsBehavior.UPDATE_LOGS_METADATA as const,
             executionStateContentLength: executionState.byteLength,
             logsFileId,
         }
@@ -120,6 +119,7 @@ const sendUpdateRunRequest = async (updateParams: UpdateStepProgressParams): Pro
             return
         }
         lastRequestHash = requestHash
+        console.log('sendProgressUpdate', request)
         const response = await sendProgressUpdate(params.engineConstants, request)
         if (!response.ok) {
             throw new ProgressUpdateError('Failed to send progress update', response)
