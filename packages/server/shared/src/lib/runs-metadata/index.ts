@@ -54,7 +54,7 @@ end
 local data = cjson.decode(existingData)
 
 -- Check if updatedAt matches
-if data.updated == expectedUpdatedAt then
+if tostring(data.updated) == tostring(expectedUpdatedAt) then
     -- updatedAt matches, safe to delete
     redis.call('DEL', key)
     return 1
@@ -192,7 +192,7 @@ export const runsMetadataQueue = {
             DELETE_IF_UNCHANGED_SCRIPT,
             1,
             key,
-            expectedUpdatedAt,
+            new Date(expectedUpdatedAt).toISOString(),
         ) as number
 
         if (result === 1) {

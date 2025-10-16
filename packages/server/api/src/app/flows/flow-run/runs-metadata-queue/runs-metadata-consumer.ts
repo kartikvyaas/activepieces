@@ -57,7 +57,6 @@ async function ensureWorkerExists(log: FastifyBaseLogger): Promise<Worker<RunsMe
             
             try {
                 const runMetadata = await runsMetadataQueue.getRunMetadata(job.data.runId)
-                console.log('runMetadata from runsMetadataQueue', runMetadata)
 
                 if (isNil(runMetadata)) {
                     log.warn({

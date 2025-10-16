@@ -683,19 +683,20 @@ function queryBuilderForFlowRun(repo: Repository<FlowRun>) {
 }
 
 async function create(params: CreateParams): Promise<FlowRun> {
+    const now = new Date().toISOString()
     const newFlowRun: FlowRun = {
         id: apId(),
         projectId: params.projectId,
         flowId: params.flowId,
         flowVersionId: params.flowVersionId,
         environment: params.environment,
-        startTime: new Date().toISOString(),
+        startTime: now,
         parentRunId: params.parentRunId,
         failParentOnFailure: params.failParentOnFailure ?? true,
         status: FlowRunStatus.QUEUED,
         stepNameToTest: params.stepNameToTest,
-        created: new Date().toISOString(),
-        updated: new Date().toISOString(),
+        created: now,
+        updated: now,
         logsFileId: null,
         steps: {},
         tags: [],

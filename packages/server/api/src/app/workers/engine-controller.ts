@@ -61,16 +61,17 @@ export const flowEngineWorker: FastifyPluginAsyncTypebox = async (app) => {
             )
         }
 
+        const now = new Date().toISOString()
         await runsMetadataQueue.add({
             id: runId,
             status: runDetails.status,
             tasks: runDetails.tasks,
             duration: runDetails.duration ? Math.floor(Number(runDetails.duration)) : undefined,
             tags: runDetails.tags ?? [],
-            finishTime: new Date().toISOString(),
+            finishTime: now,
             failedStepName: failedStepName ?? undefined,
             logsFileId: logsFileId ?? undefined,
-            updated: new Date().toISOString(),
+            updated: now,
         })
         console.log('runsMetadataQueue.add', runId)
 
