@@ -440,23 +440,30 @@ export const flowRunService = (log: FastifyBaseLogger) => ({
 
     },
     async getOne(params: GetOneParams): Promise<FlowRun | null> {
-        const flowRun = await queryBuilderForFlowRun(flowRunRepo()).where({
-            id: params.id,
-            ...(params.projectId ? { projectId: params.projectId } : {}),
-        }).getOne()
+        const [flowRunMetadata, flowRun] = await Promise.all([
+            runsMetadataQueue.getRunMetadata(params.id),
+            queryBuilderForFlowRun(flowRunRepo()).where({
+                id: params.id,
+                ...(params.projectId ? { projectId: params.projectId } : {}),
+            }).getOne(),
+        ])
+
+        if (isNil(flowRun)) {
+            return null
+        }
+
+        // Merge: Postgres provides complete base, Redis provides most recent updates
+        if (!isNil(flowRunMetadata)) {
+            return {
+                ...flowRun,
+                ...flowRunMetadata,
+            } as FlowRun
+        }
 
         return flowRun
     },
     async getOneOrThrow(params: GetOneParams): Promise<FlowRun> {
-        const flowRunMetadata = await runsMetadataQueue.getRunMetadata(params.id)
-        if (!isNil(flowRunMetadata)) {
-            return flowRunMetadata as FlowRun
-        }
-
-        const flowRun = await queryBuilderForFlowRun(flowRunRepo()).where({
-            id: params.id,
-            ...(params.projectId ? { projectId: params.projectId } : {}),
-        }).getOne()
+        const flowRun = await this.getOne(params)
 
         if (isNil(flowRun)) {
             throw new ActivepiecesError({
@@ -718,11 +725,6 @@ type UpdateLogs = {
     projectId: ProjectId
     executionStateString: string
     executionStateContentLength: number
-}
-
-type UpdateRunStatusParams = {
-    flowRunId: FlowRunId
-    status: FlowRunStatus
 }
 
 type FinishParams = {
